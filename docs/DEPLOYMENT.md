@@ -1,6 +1,6 @@
 # Deployment and dataset expansion
 
-Target: private `Signify-tech/signify` repository → Render Free Docker backend, Neon Free PostgreSQL, and a personal Vercel Hobby frontend deployed through the CLI. Media lives in the backend image. No paid storage, persistent disk, billing, or cloud deployment has been added.
+Target: private `Signify-tech/Signify` repository, branch `main` → Render Free Docker backend, Neon Free PostgreSQL, and a personal Vercel Hobby frontend deployed through the CLI. Media lives in the backend image. No paid storage, persistent disk, billing, or cloud deployment has been added.
 
 ## Current readiness
 
@@ -38,8 +38,8 @@ After resolving public rights, review and push the changes yourself. Keep the re
 
 | Setting | Value |
 |---|---|
-| Repository | Private `Signify-tech/signify` |
-| Branch | Your reviewed deployment branch |
+| Repository | Private `Signify-tech/Signify` |
+| Branch | `main` |
 | Runtime | Docker |
 | Root Directory | Empty (repository root) |
 | Dockerfile Path | `./Dockerfile` |
@@ -53,17 +53,63 @@ Do not enter Maven build/start commands for Docker. Render builds the root Docke
 
 | Environment variable | Production value |
 |---|---|
-| `SIGNIFY_DB_URL`, `SIGNIFY_DB_USERNAME`, `SIGNIFY_DB_PASSWORD` | Neon values above; required |
+| `SIGNIFY_DB_URL`, `SIGNIFY_DB_USERNAME`, `SIGNIFY_DB_PASSWORD` | Neon values above; required and nonblank |
 | `SIGNIFY_CORS_ORIGINS` | Exact frontend origin, e.g. `https://<project>.vercel.app`; required |
-| `PORT` | Supplied by Render; do not hardcode it |
-| `SPRING_PROFILES_ACTIVE` | `production` (already set in image) |
+| `PORT` | Supplied by Render (`10000` by default); do not hardcode it |
+| `SPRING_PROFILES_ACTIVE` | Set explicitly to `production` on Render; also the image default |
 | `SIGNIFY_MEDIA_DIR` | `/app/media` (already set in image) |
 | `SIGNIFY_SEED_FILE` | `/app/data/vocabulary.csv` (already set in image) |
 | `SIGNIFY_SEED_ON_STARTUP` | `true` (default) |
 
+Use only `SIGNIFY_DB_*` for connection configuration. `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` are redundant: remove them from the service and any linked environment group. Remove connection overrides `SPRING_DATASOURCE_HIKARI_JDBC_URL`, `SPRING_DATASOURCE_HIKARI_USERNAME`, `SPRING_DATASOURCE_HIKARI_PASSWORD`, `SPRING_FLYWAY_URL`, `SPRING_FLYWAY_USER`, and `SPRING_FLYWAY_PASSWORD`. Keep unrelated pool/Flyway settings. Also inspect `SPRING_APPLICATION_JSON`, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`, Docker Command, and `SPRING_CONFIG_*` for stale datasource/profile overrides; remove those overrides, preserving the image's memory settings. Do not put actual credentials into JVM arguments or Docker Command.
+
 Use the planned stable Vercel project origin initially, then update CORS after obtaining the actual URL. Origins have no path/trailing slash. Multiple explicit origins can be comma separated; never use `*`. Preview deployments need their own explicit origin if you want them to access the API. Updating Render environment variables requires redeployment.
 
 The production profile requires DB credentials/CORS explicitly, binds `0.0.0.0`, validates the entire manifest before importing, and disables Flyway clean. Local development retains its existing defaults. No public database administration/upload endpoint is introduced.
+
+### Diagnose the localhost failure and redeploy
+
+The repository's Dockerfile already sets `production`, copies `backend/src` into the build, and packages `application-production.yml` in the JAR. There is no separate Flyway URL. A baseline Docker run with the expected production profile and missing `SIGNIFY_DB_URL` did **not** attempt localhost; overriding the profile to `default` reproduced `Connection to localhost:5432 refused`. A stale `SPRING_DATASOURCE_URL` pointing to localhost also reproduced that error even with an external `SIGNIFY_DB_URL`, matching [Spring property precedence](https://docs.spring.io/spring-boot/3.5/reference/features/external-config.html). These are reproduced failure mechanisms, not proof of which setting caused the remote deployment failure. Render's actual environment and deployed revision have not been inspected.
+
+The new early environment check runs after YAML/profile resolution and **before datasource/Flyway beans connect**. Production requires a password-free PostgreSQL JDBC URL and nonblank credentials. It rejects loopback URLs, conflicting datasource/Hikari overrides, dedicated Flyway connection settings, and disabled Flyway. Neon URLs require TLS and the direct host. If [Render's injected `RENDER=true`](https://render.com/docs/environment-variables) is present, a missing/wrong production profile fails explicitly instead of using local defaults. Errors name the problematic key, never its value or the original URL parsing exception. Do not enable TRACE logging or dump environment variables for diagnosis.
+
+To configure the existing Neon database, open its Connect dialog, select the existing Singapore project/branch/database/role, and turn **connection pooling off**. For a connection string shaped like `postgresql://<role>:<password>@<direct-host>/<database>?sslmode=require`, copy the host/database into the password-free JDBC example above and enter the role/password separately in Render. Do not merely prepend `jdbc:` to a URL containing credentials. Keep `channelBinding=require` if present. The existing local PostgreSQL database does not need migration/export, and no Neon connection has been attempted automatically.
+
+After reviewing the fix, run these commands yourself from the repository root:
+
+```bash
+git status --short
+git diff --check
+git add backend/src/main/java/com/signify/config/ProductionDatabaseEnvironmentPostProcessor.java \
+  backend/src/main/resources/META-INF/spring.factories \
+  backend/src/test/java/com/signify/config/ProductionDatabaseEnvironmentPostProcessorTest.java \
+  backend/.env.example docs/DEPLOYMENT.md
+git diff --cached
+git commit -m "fix: validate production database configuration before startup"
+git push origin main
+git rev-parse HEAD
+```
+
+On the **existing** Render service:
+
+1. Confirm repository `Signify-tech/Signify`, branch `main`, runtime Docker, empty Root Directory, Dockerfile `./Dockerfile`, root build context, and Free instance. Leave Docker Command unset so the image entrypoint is used.
+2. Set the required environment values in the table above, including explicit `SPRING_PROFILES_ACTIVE=production`; remove conflicting variables from the service **and linked environment groups**. Save without exposing passwords or posting screenshots of secrets. Never change the Neon project/branch/database to work around configuration errors.
+3. Choose **Manual Deploy → Clear build cache & deploy**, so the updated code is rebuilt from GitHub. Compare the deployed commit SHA in Render's deployment details with `git rev-parse HEAD`. The build should copy `backend/src`; changing environment values alone cannot update an old JAR. Do not deploy a stale prebuilt image tag.
+4. On startup, confirm the active profile is `production`. A configuration guard error should be fixed before retrying; it deliberately prevents any connection. After configuration passes, Flyway should log the intended external database target, validate/apply migrations, and the vocabulary importer should report zero rejected rows. Share only redacted error summaries, not full connection URLs or credentials.
+5. Verify `https://<backend>.onrender.com/api/health` returns 200, then check vocabulary, a translation, an image, and video ranges as described below. `No open ports detected` after an exception is a consequence of failed startup; changing PORT cannot fix database selection.
+
+| Failure | What to check |
+|---|---|
+| `Signify production database configuration: ...` | Named key, production profile, conflicting overrides; no DB connection was attempted |
+| Still `Connection to localhost:5432 refused` without the new guard | Wrong/stale deployed commit, wrong Dockerfile/context, or bypassed entrypoint/configuration; confirm the actual artifact first |
+| External `UnknownHostException` / timeout / connection refused | Direct hostname, DNS/network reachability and Neon compute; hostname selection is now a separate issue from authentication |
+| `28P01` / password authentication failed | Role/password for the selected Neon branch/database; keep them in separate env fields |
+| `3D000` / database does not exist | Database name in the JDBC path, not a new database/provider |
+| SSL/certificate/handshake/channel-binding failure | URL TLS mode, host, Java trust store, driver settings; do not turn off TLS or certificate verification |
+| Flyway checksum/validation failure | Migration history and committed migrations; do not delete records, run clean, or repair blindly |
+| Flyway recommends upgrade for PostgreSQL 18 | The pinned Flyway 11.7.2 certifies through PostgreSQL 17; this warning is distinct from a connection failure. See actual PostgreSQL 18 validation below |
+
+The dependencies remain Flyway core/PostgreSQL module **11.7.2** and pgJDBC **42.7.11**. No speculative dependency upgrade or schema change was introduced. The [pinned Flyway PostgreSQL implementation](https://github.com/flyway/flyway/blob/flyway-11.7.2/flyway-database/flyway-database-postgresql/src/main/java/org/flywaydb/database/postgresql/PostgreSQLDatabase.java) recommends an upgrade for versions newer than 17; it does not itself reject 18. A successful isolated PostgreSQL 18 test confirms this project's migration works, but does not certify every Flyway feature or prove Neon authentication/TLS.
 
 ### Optional local Docker validation
 
@@ -186,11 +232,22 @@ Local validation on 2026-10-10:
 
 The disposable PostgreSQL database and temporary expansion files were removed; the existing local Signify database was not altered. The memory sample is indicative, not a guarantee under Docker/Render or larger future datasets. Recheck actual container memory and decoded media before deployment.
 
+### Render connection fix validation — 2026-10-11
+
+The five changed files are the production environment guard, its `META-INF/spring.factories` registration, its regression test, `backend/.env.example`, and this guide. Docker/YAML were already correct and remain unchanged. No frontend, dataset, migration, or dependency changes were required.
+
+- **188 backend tests** passed (24 new configuration regressions); executable JAR packaging passed. **46 frontend tests**, lint, and HTTPS production build passed. **8 manifest-validator tests** passed; technical preflight passed and public preflight remains blocked by the same 58 rights reviews.
+- The updated Docker image built and ran with **Java 21** and a **512 MiB cgroup limit**. The production YAML and guard registration were confirmed inside the actual image JAR; the app ran non-root, with read-only application files and no `.env` in `/app`.
+- Ten negative Docker startup cases passed: missing URL/username/password, loopback URL, wrong profile on Render, conflicting standard/Hikari/Flyway connection settings, a URL containing a password, and an invalid external hostname. All exited with failure; none attempted localhost or printed the test credential values. The invalid external hostname reached the driver/DNS layer and named the requested hostname, proving URL selection.
+- Against an **explicitly approved disposable local PostgreSQL 18.6 container**, Flyway used the application datasource, applied migration V1, and imported 233 entries. Health returned 200, runtime `PORT=9090` took effect, all 26 JPEG/38 MP4 responses matched real bytes/MIME types, and all 38 range checks passed. Required translations and ordered playable ZEBRA fingerspelling succeeded.
+- 64 translations at concurrency eight passed; peak cgroup memory was **199.8 MiB**. Restart needed no migration and preserved all IDs and creation/update timestamps. Flyway 11.7.2 emitted its PostgreSQL 18 warning; it did not prevent migration/startup.
+- The test containers, in-memory database, and test network were removed. The existing local PostgreSQL database and Neon were not touched. No commit, push, Render deployment, or cloud-authentication/TLS validation was performed. Actual Render revision/environment verification and remote browser checks remain necessary.
+
 ## Final checklist
 
 - [ ] Resolve 58 current rights reviews; preserve truthful UNVERIFIED status.
 - [ ] Confirm personal/noncommercial Hobby eligibility and Free plans with no billing.
-- [ ] Start Docker; build/run Java 21 image under 512 MB and exercise API/media/load checks.
+- [x] Build/run Java 21 Docker image under 512 MiB with isolated PostgreSQL 18; exercise API/media/load/restart checks locally.
 - [ ] Review changes/secrets, then push to the private repository yourself.
 - [ ] Create Neon Free; set separate TLS JDBC credentials on Render Free.
 - [ ] Deploy root-context Docker backend and verify migrations/import/health/media.
