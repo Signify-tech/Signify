@@ -1,0 +1,2 @@
+term,normalized_term,category,media_path,media_type,source,license,attribution,verification_status,notes
+"<word or phrase>",,WORD,"words/<file>.mp4",VIDEO,"<where the asset came from>","<licence / permission reference>","<credit line required by the source>",UNVERIFIED,"<reviewer notes>"

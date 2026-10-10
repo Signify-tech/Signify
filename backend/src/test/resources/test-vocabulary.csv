@@ -1,0 +1,29 @@
+term,normalized_term,category,media_path,media_type,source,license,attribution,verification_status,notes
+I,,WORD,,,,,,UNVERIFIED,
+want,,WORD,,,,,,UNVERIFIED,
+learn,,WORD,,,,,,UNVERIFIED,
+indian,,WORD,,,,,,UNVERIFIED,
+hello,,WORD,words/hello.mp4,VIDEO,Test fixture,Test only,Test fixture,VERIFIED,
+friend,,WORD,words/friend.png,IMAGE,Test fixture,Test only,,UNVERIFIED,
+school,,WORD,words/school.gif,GIF,Test fixture,Test only,,UNVERIFIED,missing file on purpose
+go,,WORD,,,,,,UNVERIFIED,
+yesterday,,WORD,,,,,,UNVERIFIED,
+she,,WORD,,,,,,UNVERIFIED,
+like,,WORD,,,,,,UNVERIFIED,
+apple,,WORD,,,,,,UNVERIFIED,
+not,,WORD,,,,,,UNVERIFIED,
+your,,WORD,,,,,,UNVERIFIED,
+name,,WORD,,,,,,UNVERIFIED,
+what,,WORD,,,,,,UNVERIFIED,
+book,,WORD,,,,,,UNVERIFIED,
+sign language,,PHRASE,,,,,,UNVERIFIED,
+thank you,,PHRASE,,,,,,UNVERIFIED,
+good morning,,PHRASE,,,,,,UNVERIFIED,
+A,,LETTER,,,,,,UNVERIFIED,
+B,,LETTER,,,,,,UNVERIFIED,
+E,,LETTER,letters/e.png,IMAGE,Test fixture,Test only,,UNVERIFIED,
+R,,LETTER,,,,,,UNVERIFIED,
+Z,,LETTER,,,,,,UNVERIFIED,
+bad,,WORD,../outside.mp4,VIDEO,,,,UNVERIFIED,rejected: escapes media dir
+wrong,,WORD,words/wrong.png,VIDEO,,,,UNVERIFIED,rejected: extension mismatch
+two words,,WORD,,,,,,UNVERIFIED,rejected: WORD with space

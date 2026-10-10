@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: signify
+  config:
+    # Optional local overrides in backend/.env (KEY=value lines); see .env.example
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${SIGNIFY_DB_URL:jdbc:postgresql://localhost:5432/signify}
+    username: ${SIGNIFY_DB_USERNAME:postgres}
+    password: ${SIGNIFY_DB_PASSWORD:}
+  flyway:
+    enabled: true
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${SIGNIFY_PORT:8080}
+  error:
+    include-stacktrace: never
+
+signify:
+  cors-allowed-origins: ${SIGNIFY_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  media-dir: ${SIGNIFY_MEDIA_DIR:../media}
+  vocabulary:
+    seed-file: ${SIGNIFY_SEED_FILE:../data/vocabulary.csv}
+    seed-on-startup: ${SIGNIFY_SEED_ON_STARTUP:true}
+    target-size: 100
