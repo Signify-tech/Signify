@@ -1,7 +1,7 @@
 import type { ApiErrorBody, Page, RuleInfo, SignCategory, TranslationResult, VocabularyEntry, VocabularyStats } from './types'
 
 /** Empty by default: the Vite dev server proxies /api to the backend. Set VITE_API_BASE_URL for other setups. */
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/+$/, '')
 
 export class ApiError extends Error {
   readonly status: number

@@ -1,0 +1,29 @@
+.git
+.github
+.claude
+.codex
+.aws
+.idea
+.vscode
+**/.env
+**/.env.*
+**/node_modules
+**/target
+**/dist
+**/dist-ssr
+**/coverage
+**/.cache
+**/__pycache__
+**/*.py[cod]
+**/*.log
+**/*.tsbuildinfo
+**/.DS_Store
+**/._*
+**/*.swp
+**/*.swo
+**/*~
+datasets
+frontend
+docs
+# Keep backend/src/main/resources: this includes Flyway and model dependency configuration.
+# Keep data/vocabulary.csv and media/**, including attribution/provenance documentation.

@@ -92,7 +92,11 @@ public class VocabularyRepository {
         jdbc.sql("UPDATE sign_entry SET term = :term, category = :category, media_path = :mediaPath, "
                         + "media_type = :mediaType, source = :source, license = :license, attribution = :attribution, "
                         + "verification_status = :verification, notes = :notes, updated_at = CURRENT_TIMESTAMP "
-                        + "WHERE category = :category AND normalized_term = :normalized")
+                        + "WHERE category = :category AND normalized_term = :normalized "
+                        + "AND (term IS DISTINCT FROM :term OR media_path IS DISTINCT FROM :mediaPath "
+                        + "OR media_type IS DISTINCT FROM :mediaType OR source IS DISTINCT FROM :source "
+                        + "OR license IS DISTINCT FROM :license OR attribution IS DISTINCT FROM :attribution "
+                        + "OR verification_status IS DISTINCT FROM :verification OR notes IS DISTINCT FROM :notes)")
                 .params(writeParams(e))
                 .update();
     }

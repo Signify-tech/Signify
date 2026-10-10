@@ -16,6 +16,8 @@ coverage/
 # Downloaded raw datasets; registered media/ assets stay trackable
 /datasets/raw/
 .cache/
+__pycache__/
+*.py[cod]
 
 # Logs
 logs/
@@ -32,6 +34,7 @@ lerna-debug.log*
 .claude/
 .codex/
 .aws/
+.vercel/
 .DS_Store
 ._*
 Thumbs.db

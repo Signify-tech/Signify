@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: ${SIGNIFY_DB_URL}
+    username: ${SIGNIFY_DB_USERNAME}
+    password: ${SIGNIFY_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 0
+      idle-timeout: 60000
+      connection-timeout: 30000
+      max-lifetime: 600000
+  flyway:
+    clean-disabled: true
+
+server:
+  address: 0.0.0.0
+  tomcat:
+    threads:
+      max: 8
+      min-spare: 1
+    max-connections: 64
+    accept-count: 32
+
+signify:
+  cors-allowed-origins: ${SIGNIFY_CORS_ORIGINS}
+  vocabulary:
+    # Validate the whole manifest before changing any records; reject missing registered files.
+    strict-import: true

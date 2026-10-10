@@ -40,4 +40,4 @@ The server rejects these rows at import time and logs a warning:
 - a file extension that does not match `media_type`
 - a `VERIFIED` row with no media
 
-If a registered file is missing on disk, the entry shows **Media not added** and the player shows a placeholder.
+In local development, if a registered file is missing on disk, the entry shows **Media not added** and the player shows a placeholder. Production startup rejects missing registered files before importing. See [deployment and dataset expansion](../docs/DEPLOYMENT.md) for path/licence preflight, immutable Docker packaging, and redeployment steps.

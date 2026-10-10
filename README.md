@@ -11,6 +11,8 @@ English input → NLP preprocessing → ISL-oriented transformation → sign dic
 - `data/vocabulary.csv`: vocabulary and media manifest, imported on startup. `data/vocabulary-template.csv` shows the column format.
 - `media/`: 26 alphabet JPEGs and 38 registered word/phrase MP4 clips, all unverified. See [media/README.md](media/README.md).
 
+For Neon Free, Render Free Docker, personal Vercel Hobby CLI deployment, and incremental dataset updates, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Public deployment currently requires media rights clarification; the guide lists the validation results and remaining checks.
+
 ## Prerequisites
 
 - JDK 21 or newer. Tested with JDK 25.

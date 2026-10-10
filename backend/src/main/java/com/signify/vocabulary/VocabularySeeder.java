@@ -17,10 +17,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Imports the vocabulary/media manifest CSV into the database on startup (insert or update by normalised
- * term). Rows missing from the CSV are left untouched. Invalid rows are skipped and logged.
+ * term). Rows missing from the CSV are left untouched. Production validates every row before writing;
+ * local development skips invalid rows and logs them.
  */
 @Component
 public class VocabularySeeder implements ApplicationRunner {
@@ -36,23 +39,30 @@ public class VocabularySeeder implements ApplicationRunner {
     private final SignifyProperties properties;
     private final VocabularyRepository repository;
     private final MediaStorage storage;
+    private final boolean strictImport;
 
-    public VocabularySeeder(SignifyProperties properties, VocabularyRepository repository, MediaStorage storage) {
+    public VocabularySeeder(SignifyProperties properties, VocabularyRepository repository, MediaStorage storage,
+                            @Value("${signify.vocabulary.strict-import:false}") boolean strictImport) {
         this.properties = properties;
         this.repository = repository;
         this.storage = storage;
+        this.strictImport = strictImport;
     }
 
     public record SeedReport(int inserted, int updated, List<String> rejected) {
     }
 
     @Override
+    @Transactional
     public void run(ApplicationArguments args) throws IOException {
         if (!properties.vocabulary().seedOnStartup()) {
             return;
         }
         Path file = Path.of(properties.vocabulary().seedFile()).toAbsolutePath().normalize();
         if (!Files.isRegularFile(file)) {
+            if (strictImport) {
+                throw new IllegalArgumentException("Vocabulary seed file is missing");
+            }
             log.warn("Vocabulary seed file not found: {}", file);
             return;
         }
@@ -62,19 +72,25 @@ public class VocabularySeeder implements ApplicationRunner {
         report.rejected().forEach(r -> log.warn("Rejected vocabulary row: {}", r));
     }
 
+    @Transactional
     public SeedReport importCsv(String content) {
         List<List<String>> rows = CsvParser.parse(content);
         if (rows.isEmpty()) {
+            if (strictImport) throw new IllegalArgumentException("Vocabulary CSV is empty");
             return new SeedReport(0, 0, List.of());
         }
         List<String> header = rows.get(0).stream().map(h -> h.trim().toLowerCase(Locale.ROOT)).toList();
         if (!header.containsAll(Set.of("term", "category"))) {
             throw new IllegalArgumentException("Vocabulary CSV must have a header row with at least term,category");
         }
+        if (strictImport && (!header.containsAll(HEADER) || Set.copyOf(header).size() != header.size())) {
+            throw new IllegalArgumentException("Production CSV requires every manifest column, without duplicates");
+        }
         int inserted = 0;
         int updated = 0;
         List<String> rejected = new ArrayList<>();
         Map<String, Integer> seen = new HashMap<>();
+        List<SignEntry> entries = new ArrayList<>();
         for (int i = 1; i < rows.size(); i++) {
             int line = i + 1;
             Map<String, String> row = new HashMap<>();
@@ -82,21 +98,30 @@ public class VocabularySeeder implements ApplicationRunner {
                 row.put(header.get(c), rows.get(i).get(c).trim());
             }
             try {
+                if (rows.get(i).size() != header.size()) {
+                    throw new IllegalArgumentException("incorrect column count");
+                }
                 SignEntry entry = toEntry(row);
                 Integer previous = seen.put(entry.category() + ":" + entry.normalizedTerm(), line);
                 if (previous != null) {
                     rejected.add("line " + line + ": duplicate of line " + previous + " ('" + entry.normalizedTerm() + "')");
                     continue;
                 }
-                if (repository.findByCategoryAndTerm(entry.category(), entry.normalizedTerm()).isPresent()) {
-                    repository.update(entry);
-                    updated++;
-                } else {
-                    repository.insert(entry);
-                    inserted++;
-                }
+                entries.add(entry);
             } catch (IllegalArgumentException e) {
                 rejected.add("line " + line + ": " + e.getMessage());
+            }
+        }
+        if (strictImport && (entries.isEmpty() || !rejected.isEmpty())) {
+            throw new IllegalArgumentException("Vocabulary import rejected before database writes: " + rejected);
+        }
+        for (SignEntry entry : entries) {
+            if (repository.findByCategoryAndTerm(entry.category(), entry.normalizedTerm()).isPresent()) {
+                repository.update(entry);
+                updated++;
+            } else {
+                repository.insert(entry);
+                inserted++;
             }
         }
         return new SeedReport(inserted, updated, rejected);
@@ -148,9 +173,32 @@ public class VocabularySeeder implements ApplicationRunner {
         if (verification == VerificationStatus.VERIFIED && mediaPath == null) {
             throw new IllegalArgumentException("VERIFIED requires a registered media file");
         }
-        return new SignEntry(null, term, normalized, category, mediaPath, mediaType,
+        SignEntry entry = new SignEntry(null, term, normalized, category, mediaPath, mediaType,
                 blankToNull(row.get("source")), blankToNull(row.get("license")),
                 blankToNull(row.get("attribution")), verification, blankToNull(row.get("notes")));
+        for (String field : List.of("term", "media_path", "source", "license", "attribution", "notes")) {
+            int limit = field.equals("term") ? 120
+                    : field.equals("attribution") || field.equals("notes") ? 500 : 255;
+            if (row.getOrDefault(field, "").length() > limit) {
+                throw new IllegalArgumentException(field + " exceeds " + limit + " characters");
+            }
+        }
+        if (strictImport && mediaPath != null) {
+            if (storage.resolve(entry).isEmpty()) {
+                throw new IllegalArgumentException("registered media file is missing or unreadable");
+            }
+            boolean incompleteCredit = entry.source() == null || entry.license() == null || entry.attribution() == null;
+            String licence = entry.license() == null ? "" : entry.license().toLowerCase(Locale.ROOT);
+            boolean unresolvedLicence = List.of("see hf card", "unknown", "unconfirmed", "check data.gov", "other")
+                    .stream().anyMatch(licence::contains);
+            if (verification == VerificationStatus.VERIFIED && (incompleteCredit || unresolvedLicence)) {
+                throw new IllegalArgumentException("VERIFIED media requires source, license and attribution with resolved rights");
+            }
+            if (incompleteCredit || unresolvedLicence) {
+                log.warn("Media rights require review for '{}': incomplete or unresolved licence metadata", term);
+            }
+        }
+        return entry;
     }
 
     private static <E extends Enum<E>> E parseEnum(Class<E> type, String value, String field) {
